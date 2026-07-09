@@ -64,6 +64,22 @@ class TicketUpdate(BaseModel):
     class Config:
         extra = "allow"
 
+# PROPOSED FIX: was mass-assignment — extra="allow" with no fields defined
+# meant callers could PATCH arbitrary columns (workspace_id, creator_id,
+# is_deleted, id, ...) via tickets.py's `setattr(ticket, field, value)`
+# loop. Explicit optional fields + extra="forbid" makes pydantic reject
+# anything not in this whitelist before it ever reaches the router.
+#
+# class TicketUpdate(BaseModel):
+#     title: Optional[str] = None
+#     description: Optional[str] = None
+#     status: Optional[str] = None
+#     priority: Optional[str] = None
+#     assignee_id: Optional[int] = None
+#
+#     class Config:
+#         extra = "forbid"
+
 
 class TicketOut(BaseModel):
     id: int
