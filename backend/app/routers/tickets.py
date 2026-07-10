@@ -15,6 +15,7 @@ from ..deps import get_current_user
 from ..models import Activity, Comment, Membership, Ticket, User, Workspace
 # from ..models import _utcnow_naive  # PROPOSED FIX: shared naive-UTC helper
 from ..notifications import send_notification
+# from ..notifications import enqueue_notification  # PROPOSED FIX: queue-based, DB-backed delivery
 from ..schemas import TicketCreate, TicketOut, TicketUpdate
 
 router = APIRouter(tags=["tickets"])
@@ -56,6 +57,15 @@ def _require_membership(db: Session, user: User, workspace_id: int) -> None:
 
 
 @router.post("/workspaces/{workspace_id}/tickets", response_model=TicketOut)
+# PROPOSED FIX: this is one of only two `async def` handlers in the whole
+# router (the rest are plain `def`, which Starlette auto-threadpools). It
+# has no real `await` anywhere and calls send_notification() below, which
+# does a synchronous time.sleep(0.05) — that blocks this worker's entire
+# event loop for 50ms per call since async handlers are NOT threadpooled.
+# Dropping to plain `def` matches every other handler in this file and lets
+# Starlette run it (and its blocking DB/notification calls) in a threadpool
+# instead of on the event loop.
+# def create_ticket(
 async def create_ticket(
     workspace_id: int,
     payload: TicketCreate,
@@ -103,11 +113,20 @@ async def create_ticket(
 
     if payload.assignee_id:
         send_notification(payload.assignee_id, f"You were assigned {identifier}")
+        # PROPOSED FIX: was a blocking call (time.sleep) made directly in
+        # the request path, on an in-memory outbox that's broken across
+        # workers. This does a fast DB insert instead and hands off actual
+        # delivery to the background queue worker (see notifications.py).
+        # enqueue_notification(db, payload.assignee_id, f"You were assigned {identifier}")
 
     return ticket
 
 
 @router.post("/workspaces/{workspace_id}/tickets/bulk", response_model=list[TicketOut])
+# PROPOSED FIX: same reasoning as create_ticket above — no real `await`
+# here either, just N sequential sync DB round trips held on the event loop
+# for the whole request instead of being threadpooled.
+# def bulk_create_tickets(
 async def bulk_create_tickets(
     workspace_id: int,
     payloads: list[TicketCreate],

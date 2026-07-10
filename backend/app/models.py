@@ -122,3 +122,20 @@ class Activity(Base):
     detail = Column(String, default="")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     # created_at = Column(DateTime, default=_utcnow_naive, nullable=False)  # PROPOSED FIX
+
+
+# PROPOSED FIX: durable, DB-backed notifications. Replaces the in-memory
+# `_OUTBOX` list in notifications.py, which is per-process (broken across
+# multiple workers) and lost on restart/crash. Persisting a row per
+# notification also gives you the analytics record requested — query by
+# user, status, or created_at without touching any in-memory state.
+#
+# class Notification(Base):
+#     __tablename__ = "notifications"
+#
+#     id = Column(Integer, primary_key=True)
+#     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+#     message = Column(String, nullable=False)
+#     status = Column(String, default="pending", nullable=False)  # pending|sent|failed
+#     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+#     sent_at = Column(DateTime, nullable=True)
