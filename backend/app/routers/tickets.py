@@ -3,6 +3,7 @@
 This module holds most of the ticket lifecycle logic.
 """
 from datetime import datetime, timedelta
+from typing import Literal, Optional
 # from datetime import timezone  # PROPOSED FIX: needed for the tz-aware-then-stripped helper (see models.py)
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,27 +12,14 @@ from sqlalchemy.orm import Session
 # from sqlalchemy import update  # PROPOSED FIX: needed for the atomic sequence helper below
 
 from ..database import get_db
-from ..deps import get_current_user
-from ..models import Activity, Comment, Membership, Ticket, User, Workspace
+from ..deps import get_current_user, _require_membership
+from ..models import Activity, Comment, Ticket, User, Workspace
 # from ..models import _utcnow_naive  # PROPOSED FIX: shared naive-UTC helper
 from ..notifications import send_notification
 # from ..notifications import enqueue_notification  # PROPOSED FIX: queue-based, DB-backed delivery
-from ..schemas import TicketCreate, TicketOut, TicketUpdate
+from ..schemas import TicketCreate, TicketOut, TicketPriority, TicketUpdate
 
 router = APIRouter(tags=["tickets"])
-
-
-def _require_membership(db: Session, user: User, workspace_id: int) -> None:
-    membership = (
-        db.query(Membership)
-        .filter(
-            Membership.user_id == user.id,
-            Membership.workspace_id == workspace_id,
-        )
-        .first()
-    )
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this workspace")
 
 # PROPOSED FIX: replaces the `COUNT(*) WHERE is_deleted == False` identifier
 # generation used in create_ticket and bulk_create_tickets, which caused two
@@ -172,18 +160,27 @@ def list_tickets(
     workspace_id: int,
     limit: int = 20,
     offset: int = 0,
+    assignee_id: Optional[int] = None,
+    priority: Optional[TicketPriority] = None,
+    sort_by: Literal["created_at", "updated_at"] = "created_at",
+    order: Literal["asc", "desc"] = "asc",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_membership(db, current_user, workspace_id)
-    return (
-        db.query(Ticket)
-        .filter(Ticket.workspace_id == workspace_id, Ticket.is_deleted == False)  # noqa: E712
-        .order_by(Ticket.created_at)
-        .offset(offset)
-        .limit(limit)
-        .all()
+
+    query = db.query(Ticket).filter(
+        Ticket.workspace_id == workspace_id, Ticket.is_deleted == False  # noqa: E712
     )
+    if assignee_id is not None:
+        query = query.filter(Ticket.assignee_id == assignee_id)
+    if priority is not None:
+        query = query.filter(Ticket.priority == priority.value)
+
+    sort_column = Ticket.created_at if sort_by == "created_at" else Ticket.updated_at
+    sort_column = sort_column.desc() if order == "desc" else sort_column.asc()
+
+    return query.order_by(sort_column).offset(offset).limit(limit).all()
 
 
 @router.get("/tickets/search", response_model=list[TicketOut])

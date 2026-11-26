@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+from app.models import Membership, User
 
 
 @pytest.fixture()
@@ -57,6 +58,21 @@ def bob_headers(client):
 
 
 @pytest.fixture()
+def carol_headers(client):
+    return _auth_headers(client, "carol@example.com", "Carol")
+
+
+@pytest.fixture()
 def workspace(client, alice_headers):
     resp = client.post("/workspaces", json={"name": "Engineering", "key": "ENG"}, headers=alice_headers)
     return resp.json()
+
+
+@pytest.fixture()
+def bob_in_workspace(db_session, workspace, bob_headers):
+    # No invite/add-member endpoint exists, so add Bob to the workspace
+    # directly via the DB session shared with the test client.
+    bob = db_session.query(User).filter(User.email == "bob@example.com").first()
+    db_session.add(Membership(user_id=bob.id, workspace_id=workspace["id"], role="member"))
+    db_session.commit()
+    return bob

@@ -1,7 +1,7 @@
 """Pydantic schemas."""
 from datetime import datetime
+from enum import Enum
 from typing import Optional
-# from enum import Enum  # PROPOSED FIX: needed for TicketStatus/TicketPriority below
 
 from pydantic import BaseModel, EmailStr
 
@@ -20,14 +20,18 @@ from pydantic import BaseModel, EmailStr
 #     in_progress = "in_progress"
 #     done = "done"
 #     canceled = "canceled"
-#
-#
-# class TicketPriority(str, Enum):
-#     none = "none"
-#     low = "low"
-#     medium = "medium"
-#     high = "high"
-#     urgent = "urgent"
+
+
+# Used today only to validate the `priority` filter on GET
+# /workspaces/{id}/tickets (see routers/tickets.py::list_tickets) -- not yet
+# applied to TicketCreate/TicketUpdate/TicketOut, which still store/return
+# priority as a free string.
+class TicketPriority(str, Enum):
+    none = "none"
+    low = "low"
+    medium = "medium"
+    high = "high"
+    urgent = "urgent"
 
 
 class SignupRequest(BaseModel):
@@ -92,6 +96,16 @@ class WorkspaceOut(BaseModel):
         from_attributes = True
 
 
+class WorkspaceMemberOut(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+
+    class Config:
+        from_attributes = True
+
+
 class TicketCreate(BaseModel):
     title: str
     description: str = ""
@@ -142,6 +156,7 @@ class TicketOut(BaseModel):
     assignee_id: Optional[int]
     creator_id: int
     created_at: datetime
+    updated_at: datetime
     closed_at: Optional[datetime]
 
     class Config:

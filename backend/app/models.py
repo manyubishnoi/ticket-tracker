@@ -84,6 +84,7 @@ class Ticket(Base):
     is_deleted = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     # created_at = Column(DateTime, default=_utcnow_naive, nullable=False)  # PROPOSED FIX
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     closed_at = Column(DateTime, nullable=True)
 
     # __table_args__ = (
